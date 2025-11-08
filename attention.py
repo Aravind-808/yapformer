@@ -4,82 +4,84 @@ import math
 from rope import RotaryPositionalEmbedding
 from kv_cache import KVCaching
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-class MultiHeadAttention(nn.Module):
-    '''
-    modified multihead attention block with 
-    - rope configuration
-    - KV caching
-    '''
-    def __init__(self, d_model, heads, max_seq_len):
+class GroupedQueryAttention(nn.Module):
+    """
+    Grouped Query Attention (GQA)
+    - RoPE is nice but needs GQA for faster inference since an increasing KV cache becomes a bottleneck.
+    - GQA overcomes this by computing less KV pairs per query.
+    - for example: if there are 8 query heads and 2 kv head pairs, its divided into groups of 2 where the first four query heads
+      tend to first kv pair and the next 4 tend to the second pair
+    """
+    def __init__(self, d_model, num_q_heads, num_kv_heads, max_seq_len):
         super().__init__()
-        assert d_model % heads ==0 # number of heads MUST be divisible by dimensions
-
+        assert num_q_heads % num_kv_heads == 0, "num_q_heads must be divisible by num_kv_heads"
         self.d_model = d_model
-        self.heads = heads
-        self.d_k = d_model//heads
+        self.num_q_heads = num_q_heads
+        self.num_kv_heads = num_kv_heads
+        self.group_size = num_q_heads // num_kv_heads
         self.max_seq_len = max_seq_len
-
-        self.W_q = nn.Linear(d_model, d_model) 
-        self.W_k = nn.Linear(d_model, d_model) 
-        self.W_v = nn.Linear(d_model, d_model) 
-        self.W_o = nn.Linear(d_model, d_model)  
-
-        self.rope = RotaryPositionalEmbedding(self.d_k, self.max_seq_len)
+        self.head_dim = d_model // num_q_heads
+        
+        # linear projections
+        self.W_q = nn.Linear(d_model, d_model)
+        self.W_k = nn.Linear(d_model, num_kv_heads * self.head_dim)
+        self.W_v = nn.Linear(d_model, num_kv_heads * self.head_dim)
+        self.W_o = nn.Linear(d_model, d_model)
+        
+        self.rope = RotaryPositionalEmbedding(self.head_dim, max_seq_len)
         self.kv_cache = None
-
-    def scaled_dotproduct_attention(self, Q, K, V, mask = None):
-        # attention(q,k,v) = softmax((q*k_transpose)/root(dimensionality)) * v
-
-        attention_scores = torch.matmul(Q, K.transpose(-2, -1))/math.sqrt(self.d_k)
-        if mask is not None: # apply the mask (optional)
-            attention_scores = attention_scores.masked_fill(mask == 0, -1e9)
-        attention_probabilities = torch.softmax(attention_scores, dim = -1)
-
-        output = torch.matmul(attention_probabilities, V)
-
-        return output
-
-    # split the heads induvidually
-    def split_heads(self, x):
-        batch_size, seq_length, d_model = x.size()
-        return x.view(batch_size, seq_length, self.heads, self.d_k).transpose(1, 2)
     
-    # combine them back
+    def split_heads(self, x, num_heads):
+        b, seq_len, d = x.shape
+        head_dim = d // num_heads
+        return x.view(b, seq_len, num_heads, head_dim).transpose(1, 2)  # (B, H, T, d_head)
+    
     def combine_heads(self, x):
-        batch_size, num, seq_length,  d_k = x.size()
-        return x.transpose(1, 2).contiguous().view(batch_size, seq_length, self.d_model)
-
-    # main mechanism that is done during inference
-    def forward(self, Q, K, V, mask = None):
-        Q = self.split_heads(self.W_q(Q))
-        K = self.split_heads(self.W_k(K))
-        V = self.split_heads(self.W_v(V))
-
-        # initialize k_cache and v_cache
-        batch, head, token_size, _ = K.shape # V's shape is also same
-
+        b, h, t, d = x.shape
+        return x.transpose(1, 2).reshape(b, t, h * d)
+    
+    def forward(self, x, mask=None):
+        """
+        x: (B, T, d_model)
+        mask: optional attention mask
+        """
+        b, t, _ = x.shape
+        device = x.device
+        
+        #project to Q, K, V
+        Q = self.split_heads(self.W_q(x), self.num_q_heads)  # (B, Hq, T, d_head)
+        K = self.split_heads(self.W_k(x), self.num_kv_heads) # (B, Hkv, T, d_head)
+        V = self.split_heads(self.W_v(x), self.num_kv_heads) # (B, Hkv, T, d_head)
+        
+        # if cache isnt there, add it.
         if self.kv_cache is None:
             self.kv_cache = KVCaching(
-                batch=batch,
-                heads= head,
-                max_seq_len=self.max_seq_len,
-                d_k= self.d_k,
-                device = device
-                )
-        # keep track of the current index in seq
-        start_pos = self.kv_cache.cache_idx
-
-        # apply rope wit current pos offset
-        Q, K = self.rope(Q, K, pos_offset = start_pos)
-
-        # update caches in place
-        self.kv_cache.update_cache(K, V)
-        # get new cached values
-        K, V = self.kv_cache.get_cache()
-
-        # multihead attention stuff
-        attention_output = self.scaled_dotproduct_attention(Q,K,V, mask)
-        output = self.W_o(self.combine_heads(attention_output))
+                batch=b, 
+                heads=self.num_kv_heads, 
+                max_seq_len=self.max_seq_len, 
+                d_k=self.head_dim, 
+                device=device
+            )
         
-        return output
+        start_pos = self.kv_cache.cache_idx
+        
+        # apply rotary embeddings
+        Q, K = self.rope(Q, K, pos_offset=start_pos)
+        
+        # update cache and get past keys/values
+        self.kv_cache.update_cache(K, V)
+        K, V = self.kv_cache.get_cache()  #(B, Hkv, T_cache, d_head)
+        
+        #expand kv heads to match query heads
+        K = K.repeat_interleave(self.group_size, dim=1)
+        V = V.repeat_interleave(self.group_size, dim=1)
+        
+        # scaled dot-product attention
+        attn_scores = torch.matmul(Q, K.transpose(-2, -1)) / math.sqrt(self.head_dim)
+        if mask is not None:
+            attn_scores = attn_scores.masked_fill(mask == 0, -1e9)
+        attn_weights = torch.softmax(attn_scores, dim=-1)
+        attn_output = torch.matmul(attn_weights, V)  # (B, Hq, T, d_head)
+        
+        out = self.W_o(self.combine_heads(attn_output))  # (B, T, d_model)
+        return out
