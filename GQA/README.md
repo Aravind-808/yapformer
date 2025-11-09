@@ -1,6 +1,4 @@
-# Grouped Query Attention (GQA) 🧠
-
-A beginner-friendly guide to understanding Grouped Query Attention in transformer models.
+# Grouped Query Attention (GQA)
 
 ## What is Attention?
 
@@ -52,10 +50,9 @@ You still get 8 different "perspectives" (queries), but they're looking at share
 
 ## Benefits
 
-✅ **4x less memory** (in our 8→2 example)  
-✅ **Faster inference** (less data to move around)  
-✅ **Minimal quality loss** (research shows ~similar performance to MHA)  
-✅ **Better than MQA** (Multi-Query Attention uses only 1 K/V head - too aggressive!)
+**less memory** (in our 8→2 example)  
+**fast inference** (less data to move around)  
+**minimal quality loss** (research shows ~similar performance to MHA)  
 
 ## Where is GQA Used?
 
@@ -77,22 +74,13 @@ K = K.repeat_interleave(group_size, dim=1)  # 2 heads → 8 heads (copied)
 V = V.repeat_interleave(group_size, dim=1)
 ```
 
-## Quick Comparison
-
-| Method | Q Heads | K/V Heads | Memory | Quality |
-|--------|---------|-----------|--------|---------|
-| MHA    | 8       | 8         | High   | Best    |
-| GQA    | 8       | 2         | Medium | ~Same   |
-| MQA    | 8       | 1         | Low    | Okay    |
-
 ## When to Use GQA?
 
 Use GQA when:
-- Building chatbots or assistants (long conversations)
+- Youre using KV caching. GQA goes really well with KV caching.
 - Working with limited GPU memory
-- Deploying models at scale
 - You want a sweet spot between performance and efficiency
 
 ---
 
-**TL;DR**: GQA lets multiple query heads share the same key/value heads, dramatically reducing memory while maintaining quality. It's the secret sauce behind efficient modern LLMs! 🚀
+**TL;DR**: GQA lets multiple query heads share the same key/value heads, dramatically reducing memory while maintaining quality.
