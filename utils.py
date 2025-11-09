@@ -31,7 +31,7 @@ class SwiGLU(nn.Module):
     def forward(self, x):
         out = self.lin1(x) # SwiGLU gated linear unit passes the input 2 times, once through a swish (input * sigmoid(input)) func and one through a linear proj
                            # and multiplies them both.
-        swish = out * torch.sigmoid(x)
+        swish = out * torch.sigmoid(out)
 
         swiglu = swish * self.lin2(x)
 
