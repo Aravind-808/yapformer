@@ -40,39 +40,46 @@ class GroupedQueryAttention(nn.Module):
         b, h, t, d = x.shape
         return x.transpose(1, 2).reshape(b, t, h * d)
     
-    def forward(self, x, mask=None):
+    def reset_cache(self): # reset cache after every sequence generated. 
+        self.kv_cache = None
+    
+    def forward(self, x, mask=None, use_cache=False):
         """
         x: (B, T, d_model)
         mask: optional attention mask
+        use_cache: whether to use KV caching (for inference only)
         """
         b, t, _ = x.shape
         device = x.device
         
-        #project to Q, K, V
         Q = self.split_heads(self.W_q(x), self.num_q_heads)  # (B, Hq, T, d_head)
         K = self.split_heads(self.W_k(x), self.num_kv_heads) # (B, Hkv, T, d_head)
         V = self.split_heads(self.W_v(x), self.num_kv_heads) # (B, Hkv, T, d_head)
         
-        # if cache isnt there, add it.
-        if self.kv_cache is None:
-            self.kv_cache = KVCaching(
-                batch=b, 
-                heads=self.num_kv_heads, 
-                max_seq_len=self.max_seq_len, 
-                d_k=self.head_dim, 
-                device=device
-            )
+        start_pos = 0
         
-        start_pos = self.kv_cache.cache_idx
+        if use_cache:
+            if self.kv_cache is None:
+                self.kv_cache = KVCaching(
+                    batch=b, 
+                    heads=self.num_kv_heads, 
+                    max_seq_len=self.max_seq_len, 
+                    d_k=self.head_dim, 
+                    device=device
+                )
+            start_pos = self.kv_cache.cache_idx
+            
+            # apply rotary embeddings with position offset
+            Q, K = self.rope(Q, K, pos_offset=start_pos)
+            
+            # update cache and get all past keys/values
+            self.kv_cache.update_cache(K, V)
+            K, V = self.kv_cache.get_cache()  # (B, Hkv, T_cache, d_head)
+        else:
+            # we dont use kv caching for training.
+            Q, K = self.rope(Q, K, pos_offset=0)
         
-        # apply rotary embeddings
-        Q, K = self.rope(Q, K, pos_offset=start_pos)
-        
-        # update cache and get past keys/values
-        self.kv_cache.update_cache(K, V)
-        K, V = self.kv_cache.get_cache()  #(B, Hkv, T_cache, d_head)
-        
-        #expand kv heads to match query heads
+        # expand kv heads to match query heads
         K = K.repeat_interleave(self.group_size, dim=1)
         V = V.repeat_interleave(self.group_size, dim=1)
         

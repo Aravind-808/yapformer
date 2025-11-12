@@ -27,15 +27,16 @@ class Transformer(nn.Module):
         ])
         self.max_seq_len = max_seq_len
 
-    def forward(self, x, mask=None):
+    def forward(self, x, mask=None, use_cache=False):
         """
         x: (B, T, d_model)
         mask: optional attention mask
+        use_cache: whether to use KV caching for inference
         """
         for layer in self.layers:
             # attn block
             x_norm = layer['rmsnorm1'](x)
-            attn_out = layer['attention'](x_norm, mask=mask)
+            attn_out = layer['attention'](x_norm, mask=mask, use_cache=use_cache)
             x = x + attn_out 
 
             # ffn block
