@@ -12,7 +12,7 @@ class GroupedQueryAttention(nn.Module):
     - for example: if there are 8 query heads and 2 kv head pairs, its divided into groups of 2 where the first four query heads
       tend to first kv pair and the next 4 tend to the second pair
     """
-    def __init__(self, d_model, num_q_heads, num_kv_heads, max_seq_len):
+    def __init__(self, d_model, num_q_heads, num_kv_heads, max_seq_len, dropout=0.1):
         super().__init__()
         assert num_q_heads % num_kv_heads == 0, "num_q_heads must be divisible by num_kv_heads"
         self.d_model = d_model
@@ -21,7 +21,7 @@ class GroupedQueryAttention(nn.Module):
         self.group_size = num_q_heads // num_kv_heads
         self.max_seq_len = max_seq_len
         self.head_dim = d_model // num_q_heads
-        
+        self.attn_dropout = nn.Dropout(dropout)
         # linear projections
         self.W_q = nn.Linear(d_model, d_model)
         self.W_k = nn.Linear(d_model, num_kv_heads * self.head_dim)
@@ -88,6 +88,7 @@ class GroupedQueryAttention(nn.Module):
         if mask is not None:
             attn_scores = attn_scores.masked_fill(mask == 0, -1e9)
         attn_weights = torch.softmax(attn_scores, dim=-1)
+        attn_weights = self.attn_dropout(attn_weights)
         attn_output = torch.matmul(attn_weights, V)  # (B, Hq, T, d_head)
         
         out = self.W_o(self.combine_heads(attn_output))  # (B, T, d_model)

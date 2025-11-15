@@ -25,6 +25,9 @@ class DecoderOnlyTransformer(nn.Module):
         self.final_norm = RMSNorm(d_model, eps)
         self.lm_head = nn.Linear(d_model, vocab_size, bias=False)
 
+        # weight tying, shares same weights bw input embedding and output layer
+        self.lm_head.weight = self.token_embedding.weight
+        
     def create_mask(self, input_ids, pad_token_id=0):
         """
         Create combined padding + causal mask

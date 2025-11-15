@@ -15,12 +15,14 @@ from attention import GroupedQueryAttention
 from utils import RMSNorm, SwiGLU
 
 class Transformer(nn.Module):
-    def __init__(self, d_model, num_layers, num_q_heads, num_kv_heads, max_seq_len, eps=1e-8):
+    def __init__(self, d_model, num_layers, num_q_heads, num_kv_heads, max_seq_len,dropout = 0.1, eps=1e-8):
         super().__init__()
         self.layers = nn.ModuleList([
             nn.ModuleDict({
                 'attention': GroupedQueryAttention(d_model, num_q_heads, num_kv_heads, max_seq_len),
                 'rmsnorm1': RMSNorm(d_model),
+                'dropout1': nn.Dropout(dropout),
+                'dropout2': nn.Dropout(dropout),
                 'ffn': SwiGLU(d_model),
                 'rmsnorm2': RMSNorm(d_model)
             }) for _ in range(num_layers)
@@ -37,11 +39,13 @@ class Transformer(nn.Module):
             # attn block
             x_norm = layer['rmsnorm1'](x)
             attn_out = layer['attention'](x_norm, mask=mask, use_cache=use_cache)
+            attn_out = layer['dropout1'](attn_out)
             x = x + attn_out 
 
             # ffn block
             x_norm = layer['rmsnorm2'](x)
             ffn_out = layer['ffn'](x_norm)
+            ffn_out = layer['dropout2'](ffn_out)
             x = x + ffn_out  
 
         return x
