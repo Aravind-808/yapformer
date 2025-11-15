@@ -1,0 +1,130 @@
+"""
+Inference script for generating text with trained model
+"""
+
+import torch
+from transformers import GPT2Tokenizer
+from model import DecoderOnlyTransformer
+from config import Config
+
+config = Config()
+
+@torch.no_grad()
+def generate_text(model, tokenizer, prompt, max_length=200, temperature=0.4, top_k=40, device='cuda'):
+    
+    model.eval()
+
+    for layer in model.transformer.layers:
+        layer['attention'].reset_cache()
+    
+    input_ids = tokenizer.encode(prompt, return_tensors='pt').to(device)
+    generated_ids = input_ids.clone()
+    logits = model(input_ids, use_cache=True)
+
+    for _ in range(max_length):
+        
+        next_token_logits = logits[0, -1, :] / temperature
+        
+        top_k_logits, top_k_indices = torch.topk(next_token_logits, top_k)
+        probs = torch.softmax(top_k_logits, dim=-1)
+        next_token = top_k_indices[torch.multinomial(probs, 1)]
+        
+        generated_ids = torch.cat([generated_ids, next_token.unsqueeze(0)], dim=1)
+        
+        if next_token.item() == tokenizer.eos_token_id:
+            break
+
+        logits = model(next_token.unsqueeze(0), use_cache=True) # only passing next token since we are using kv cache
+    
+    for layer in model.transformer.layers:
+        layer['attention'].reset_cache()
+    
+    return tokenizer.decode(generated_ids[0], skip_special_tokens=True)
+
+
+def load_model(checkpoint_path, config):
+    print(f"Loading model from {checkpoint_path}...")
+    
+    model = DecoderOnlyTransformer(
+        vocab_size=config.vocab_size,
+        d_model=config.d_model,
+        num_layers=config.num_layers,
+        num_q_heads=config.num_q_heads,
+        num_kv_heads=config.num_kv_heads,
+        max_seq_len=config.max_seq_len
+    ).to(config.device)
+    
+    checkpoint = torch.load(checkpoint_path, map_location=config.device)
+    model.load_state_dict(checkpoint['model_state_dict'])
+    model.eval()
+    
+    tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+    tokenizer.pad_token = tokenizer.eos_token
+    
+    print(f"Model loaded! (Step: {checkpoint['step']}, Loss: {checkpoint['loss']:.4f})")
+    
+    return model, tokenizer
+
+
+def interactive_generation(model, tokenizer, config):
+    print("\n" + "="*70)
+    print("Interactive Story Generation")
+    print("="*70)
+    print("Type your prompt and press Enter. Type 'quit' to exit.")
+    print("Commands:")
+    print("  - 'temp X' to change temperature (e.g., 'temp 0.9')")
+    print("  - 'length X' to change max length (e.g., 'length 300')")
+    print("  - 'quit' to exit")
+    print("="*70 + "\n")
+    
+    temperature = 0.8
+    max_length = 200
+    
+    while True:
+        prompt = input("\nPrompt: ").strip()
+        
+        if prompt.lower() == 'quit':
+            print("Goodbye!")
+            break
+        
+        if prompt.lower().startswith('temp '):
+            try:
+                temperature = float(prompt.split()[1])
+                print(f"Temperature set to {temperature}")
+                continue
+            except:
+                print("Invalid temperature format. Use: temp 0.9")
+                continue
+        
+        if prompt.lower().startswith('length '):
+            try:
+                max_length = int(prompt.split()[1])
+                print(f"Max length set to {max_length}")
+                continue
+            except:
+                print("Invalid length format. Use: length 300")
+                continue
+        
+        if not prompt:
+            print("Please enter a prompt!")
+            continue
+        
+        print("\nGenerating...\n")
+        generated = generate_text(
+            model, 
+            tokenizer, 
+            prompt,
+            max_length=max_length,
+            temperature=temperature,
+            device=config.device
+        )
+        
+        print("-" * 70)
+        print(generated)
+        print("-" * 70)
+
+
+if __name__ == "__main__":
+    # Load model
+    model, tokenizer = load_model("checkpoints\checkpoint_step_5000.pt", config)
+    interactive_generation(model, tokenizer, config)
