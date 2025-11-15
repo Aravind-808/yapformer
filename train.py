@@ -6,13 +6,12 @@ Optimized for RTX 3060 6GB VRAM
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
-from torch.cuda.amp import autocast, GradScaler
+from torch.amp import autocast, GradScaler
 from datasets import load_dataset
 from transformers import GPT2Tokenizer
 from tqdm import tqdm
 import os
 
-# Import your model and config
 from model import DecoderOnlyTransformer
 from config import Config
 import warnings
@@ -63,11 +62,11 @@ def create_model(config):
         max_seq_len=config.max_seq_len
     )
     
-    # Count parameters
-    total_params = sum(p.numel() for p in model.parameters())
-    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    print(f"Total parameters: {total_params:,}")
-    print(f"Trainable parameters: {trainable_params:,}")
+    # useful if you wanna know params count
+    # total_params = sum(p.numel() for p in model.parameters())
+    # trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    # print(f"Total parameters: {total_params:,}")
+    # print(f"Trainable parameters: {trainable_params:,}")
     
     return model.to(config.device)
 
@@ -88,7 +87,7 @@ def train_step(model, batch, optimizer, scaler, config):
     input_ids = batch['input_ids'].to(config.device)
     labels = batch['labels'].to(config.device)
     
-    with autocast(enabled=config.mixed_precision): # mixed precision helps with memory
+    with autocast(enabled=config.mixed_precision, device_type='cuda'): # mixed precision helps with memory
         logits = model(input_ids)
         
         shift_logits = logits[..., :-1, :].contiguous() # since we predict next token,shift by 1
@@ -117,7 +116,7 @@ def evaluate(model, eval_dataloader, config, max_batches=50):
         input_ids = batch['input_ids'].to(config.device)
         labels = batch['labels'].to(config.device)
         
-        with autocast(enabled=config.mixed_precision):
+        with autocast(enabled=config.mixed_precision, device_type='cuda'):
             logits = model(input_ids)
             shift_logits = logits[..., :-1, :].contiguous()
             shift_labels = labels[..., 1:].contiguous()
@@ -189,7 +188,7 @@ def train(config):
     scheduler = get_lr_scheduler(optimizer, config.warmup_steps, config.max_steps)
     
     # mixed precision scaler
-    scaler = GradScaler(enabled=config.mixed_precision)
+    scaler = GradScaler(enabled=config.mixed_precision, device='cuda')
     
     # train :3
     model.train()

@@ -86,7 +86,7 @@ class GroupedQueryAttention(nn.Module):
         # scaled dot-product attention
         attn_scores = torch.matmul(Q, K.transpose(-2, -1)) / math.sqrt(self.head_dim)
         if mask is not None:
-            attn_scores = attn_scores.masked_fill(mask == 0, -1e9)
+            attn_scores = attn_scores.masked_fill(mask == 0, float('-inf')) # using -inf because we are using precision float16/bfloat16
         attn_weights = torch.softmax(attn_scores, dim=-1)
         attn_weights = self.attn_dropout(attn_weights)
         attn_output = torch.matmul(attn_weights, V)  # (B, Hq, T, d_head)
