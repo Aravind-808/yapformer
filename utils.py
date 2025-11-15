@@ -22,17 +22,19 @@ class RMSNorm(nn.Module):
         return rms
 
 class SwiGLU(nn.Module):
-    def __init__(self, d_model):
+    def __init__(self, d_model, mul = 4):
         super().__init__()
-        self.lin1 = nn.Linear(d_model, d_model)
-        self.lin2 = nn.Linear(d_model, d_model)
+        d_ff = int(d_model * mul)
+        self.lin1 = nn.Linear(d_model, d_ff)
+        self.lin2 = nn.Linear(d_model, d_ff)
+        self.lin3 = nn.Linear(d_ff, d_model)
 
     def forward(self, x):
         out = self.lin1(x) # SwiGLU gated linear unit passes the input 2 times, once through a swish (input * sigmoid(input)) func and one through a linear proj
                            # and multiplies them both.
         swish = out * torch.sigmoid(out)
 
-        swiglu = swish * self.lin2(x)
+        swiglu = self.lin3(swish * self.lin2(x))
 
         return swiglu
     
