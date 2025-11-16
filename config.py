@@ -17,13 +17,13 @@ class Config:
     weight_decay = 0.1
     max_epochs = 9999 # set ts so high we use only max_steps
     warmup_steps = 500
-    max_steps = 5000  # max steps is basically the number of times the gradient is updated
+    max_steps = 15000  # max steps is basically the number of times the gradient is updated
     
     device = 'cuda' if __import__('torch').cuda.is_available() else 'cpu'
     mixed_precision = True
     num_workers = 4
     
-    log_interval = 50
-    eval_interval = 500
-    save_interval = 1000
+    log_interval = 500
+    eval_interval = 1000
+    save_interval = 2500
     checkpoint_dir = './checkpoints'

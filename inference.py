@@ -13,7 +13,7 @@ warnings.filterwarnings("ignore")
 config = Config()
 
 @torch.no_grad()
-def generate_text(model, tokenizer, prompt, max_length=200, temperature=0.4, top_k=40, device='cuda'):
+def generate_text(model, tokenizer, prompt, max_length=200, temperature=0.4, top_k=60, device='cuda'):
     
     model.eval()
 
@@ -70,13 +70,11 @@ def load_model(checkpoint_path, config):
 
 
 def interactive_generation(model, tokenizer, config):
-    print("\n" + "="*70)
-    print("Interactive Story Generation")
     print("="*70)
     print("Type your prompt and press Enter. Type 'quit' to exit.")
     print("="*70 + "\n")
     
-    temperature = 0.8
+    temperature = 0.6
     max_length = 200
     
     while True:
@@ -107,7 +105,12 @@ def interactive_generation(model, tokenizer, config):
             if last_period != -1:
                 generated = generated[:last_period + 1]
         
+        disp_buf= "" # the model loves continuing the story after "the end" so ima make smth to detect "the end" and stop generating
         for char in generated:
+            disp_buf += char
+            if "the end" in disp_buf.lower(): # detect "the end"
+                print("d.") # print "The End."
+                break
             print(char, end = '')
             time.sleep(0.01)
         print("\n")
@@ -117,5 +120,5 @@ def interactive_generation(model, tokenizer, config):
 
 if __name__ == "__main__":
     # Load model
-    model, tokenizer = load_model("checkpoints\checkpoint_step_5000.pt", config)
+    model, tokenizer = load_model("checkpoints\checkpoint_step_15000.pt", config)
     interactive_generation(model, tokenizer, config)

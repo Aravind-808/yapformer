@@ -147,9 +147,20 @@ def save_checkpoint(model, optimizer, scheduler, step, loss, config): #save chkp
     torch.save(checkpoint, path)
     print(f"Saved checkpoint to {path}")
 
+def load_checkpoint(checkpoint_path, model, optimizer, scheduler):
+    print(f"Loading checkpoint from {checkpoint_path}...")
+    checkpoint = torch.load(checkpoint_path, map_location=config.device)
+    
+    model.load_state_dict(checkpoint['model_state_dict'])
+    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+    scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
+    
+    start_step = checkpoint['step']
+    print(f"Resuming from step {start_step}")
+    
+    return start_step
 
 def train(config):
-    """Main training function"""
     
     # prep data
     tokenized_dataset, tokenizer = prepare_dataset()
@@ -198,6 +209,12 @@ def train(config):
     print("\n" + "="*70)
     print("Starting Training")
     print("="*70 + "\n")
+
+    resume_chkpt = "./checkpoints/checkpoint_step_7500.pt"
+    if os.path.exists(resume_chkpt):
+        global_step = load_checkpoint(resume_chkpt, model, optimizer, scheduler)
+    
+    loss_counter = 0
     
     for epoch in range(config.max_epochs):
         pbar = tqdm(train_dataloader, desc=f"Epoch {epoch+1}/{config.max_epochs}")
@@ -218,10 +235,11 @@ def train(config):
                 scheduler.step()
                 
                 global_step += 1
+                loss_counter += 1
                 
                 # simple logging
                 if global_step % config.log_interval == 0:
-                    avg_loss = running_loss / config.log_interval
+                    avg_loss = running_loss / loss_counter
                     lr = scheduler.get_last_lr()[0]
                     pbar.set_postfix({
                         'loss': f'{avg_loss:.4f}',
@@ -230,6 +248,7 @@ def train(config):
                     })
                     
                     running_loss = 0
+                    loss_counter = 0
                 
                 # for each eval interval, run eval
                 if global_step % config.eval_interval == 0:
