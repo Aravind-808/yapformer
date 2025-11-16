@@ -6,6 +6,9 @@ import torch
 from transformers import GPT2Tokenizer
 from model import DecoderOnlyTransformer
 from config import Config
+import time
+import warnings
+warnings.filterwarnings("ignore")
 
 config = Config()
 
@@ -71,10 +74,6 @@ def interactive_generation(model, tokenizer, config):
     print("Interactive Story Generation")
     print("="*70)
     print("Type your prompt and press Enter. Type 'quit' to exit.")
-    print("Commands:")
-    print("  - 'temp X' to change temperature (e.g., 'temp 0.9')")
-    print("  - 'length X' to change max length (e.g., 'length 300')")
-    print("  - 'quit' to exit")
     print("="*70 + "\n")
     
     temperature = 0.8
@@ -86,24 +85,6 @@ def interactive_generation(model, tokenizer, config):
         if prompt.lower() == 'quit':
             print("Goodbye!")
             break
-        
-        if prompt.lower().startswith('temp '):
-            try:
-                temperature = float(prompt.split()[1])
-                print(f"Temperature set to {temperature}")
-                continue
-            except:
-                print("Invalid temperature format. Use: temp 0.9")
-                continue
-        
-        if prompt.lower().startswith('length '):
-            try:
-                max_length = int(prompt.split()[1])
-                print(f"Max length set to {max_length}")
-                continue
-            except:
-                print("Invalid length format. Use: length 300")
-                continue
         
         if not prompt:
             print("Please enter a prompt!")
@@ -120,7 +101,17 @@ def interactive_generation(model, tokenizer, config):
         )
         
         print("-" * 70)
-        print(generated)
+        # end the generated text at the nearest fullstop when the max length is reached
+        if len(generated) >= max_length:
+            last_period = generated.rfind('.', len(prompt))
+            if last_period != -1:
+                generated = generated[:last_period + 1]
+        
+        for char in generated:
+            print(char, end = '')
+            time.sleep(0.01)
+        print("\n")
+
         print("-" * 70)
 
 
