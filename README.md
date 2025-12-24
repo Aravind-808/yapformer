@@ -1,5 +1,7 @@
 # **YapFormer : A Transformer Implementation with Modern Optimizations ✧ദ്ദി(˵ •̀ ᴗ - ˵ ) ✧**
 
+https://github.com/user-attachments/assets/4f6f1d3b-4388-4657-a99c-e4b7251e04f8
+
 **YapFormer** is a transformer model built entirely from scratch, featuring modern architectural components and efficient training optimizations.  
 The final model contains **~56 million parameters** and was trained for **15,000 steps** (~4.5 hours) on the **TinyStories** dataset.
 
