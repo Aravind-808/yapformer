@@ -12,6 +12,19 @@ warnings.filterwarnings("ignore")
 
 config = Config()
 
+ASCII_ART = r"""
+                                 ,d8888b                                               
+                                 88P'                                                  
+                              d888888P                                                 
+?88   d8P  d888b8b  ?88,.d88b,  ?88'     d8888b   88bd88b  88bd8b,d88b  d8888b  88bd88b
+d88   88  d8P' ?88  `?88'  ?88  88P     d8P' ?88  88P'  `  88P'`?8P'?8bd8b_,dP  88P'  `
+?8(  d88  88b  ,88b   88b  d8P d88      88b  d88 d88      d88  d88  88P88b     d88     
+`?88P'?8b `?88P'`88b  888888P'd88'      `?8888P'd88'     d88' d88'  88b`?888P'd88'     
+       )88            88P'                                                             
+      ,d8P           d88                                                               
+   `?888P'           ?8P                                                               
+"""
+
 @torch.no_grad()
 def generate_text(model, tokenizer, prompt, max_length=200, temperature=0.4, top_k=60, device='cuda'):
     
@@ -71,6 +84,7 @@ def load_model(checkpoint_path, config):
 
 def interactive_generation(model, tokenizer, config):
     print("="*70)
+    print(ASCII_ART)
     print("Type your prompt and press Enter. Type 'quit' to exit.")
     print("="*70 + "\n")
     
