@@ -32,7 +32,7 @@ YapFormer is a **from-scratch GPT-style autoregressive transformer** that integr
 -   Gradient clipping
     
 
-This project serves as both a learning exercise and a practical lightweight generative model.
+This project serves as a learning exercise.
 
 ----------
 
