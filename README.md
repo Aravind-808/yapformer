@@ -93,7 +93,21 @@ Modern GPU-friendly techniques:
 
 **Model Structure**
 
-`Token  Embedding ↓ RoPE  Rotary  Position  Encoding ↓ N × [  RMSNorm ├── Multi-Head  Attention  (GQA  +  KV  Cache) ↓ Residual ↓ RMSNorm ├── SwiGLU  Feed-Forward ↓ Residual  ] ↓ Final  RMSNorm ↓ Linear  LM  Head` 
+```
+Token Embedding
+ + RoPE
+      ↓
+N × Transformer Blocks:
+  RMSNorm
+    → Multi-Head Self-Attention (GQA, KV Cache)
+    → Residual
+  RMSNorm
+    → SwiGLU Feed-Forward
+    → Residual
+      ↓
+Final RMSNorm
+ → Linear LM Head
+```
 
 
 ----------
@@ -119,28 +133,3 @@ Modern GPU-friendly techniques:
     -   🤗 Hugging Face (datasets/tokenization)
         
     -    PyTorch (core autograd & tensor ops)
-        
-
-----------
-
-#  **How to Run ૮⎚ﻌ⎚ა⁩**
-
-### **1. Clone the Repository**
-
-`git clone https://github.com/Aravind-808/YapFormer`
-` cd YapFormer` 
-
-### **2. Install Dependencies**
-
-`pip install -r requirements.txt` 
-
-### **3. Generate Text**
-
-`python inference.py `
-
-### **4. Enter your prompt**
-Prompt: `Once upon a time` 
-
-### **5. Example Output**
-
-`Once upon a time there was a tiny mouse who loved reading stories...`
